@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "GitSquasher": {
+      "commandName": "Project",
+      "commandLineArgs": "-c \"test commit\" -c \"another line\""
+    }
+  }
+}

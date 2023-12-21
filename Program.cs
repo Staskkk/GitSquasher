@@ -2,8 +2,12 @@
 using CommandLine;
 using System.Text;
 
+var parser = new Parser(conf =>
+{
+    conf.AllowMultiInstance = true;
+});
 
-var result = Parser.Default.ParseArguments<Options>(args);
+var result = parser.ParseArguments<Options>(args);
 if (result.Errors.Any())
 {
     return;
@@ -11,20 +15,25 @@ if (result.Errors.Any())
 
 var options = result.Value;
 
-options.RepositoryPath ??= Directory.GetCurrentDirectory();
-
-options.TargetBranch ??= await GetCurrentBranchAsync();
-
-Console.WriteLine(options.MainBranch);
-Console.WriteLine(options.TargetBranch);
-Console.WriteLine(options.RepositoryPath);
-Console.WriteLine(options.Comments.Count());
-
+var path = options.RepositoryPath ?? Directory.GetCurrentDirectory();
 var main = options.MainBranch;
-string target = options.TargetBranch;
+var target = options.TargetBranch ?? await GetCurrentBranchAsync();
 var squashBranch = $"{target}-squash";
 var comments = string.Join(' ', options.Comments.Select(comment => $"-m {comment}"));
 var remote = options.Remote;
+
+Console.WriteLine($"Path: {path}");
+Console.WriteLine($"Main branch: {main}");
+Console.WriteLine($"Target branch: {target}");
+Console.WriteLine($"Squash branch: {squashBranch}");
+Console.WriteLine($"Comments: {comments}");
+Console.WriteLine($"Remote: {remote}");
+
+if (main == target)
+{
+    Console.WriteLine("Main branch should be different from the target branch");
+    return;
+}
 
 await RunGitCommandAsync($"checkout {target}");
 await RunGitCommandAsync("pull");
@@ -44,17 +53,29 @@ await RunGitCommandAsync($"branch -m {target}");
 await RunGitCommandAsync($"push");
 
 
-async Task<string> GetCurrentBranchAsync()
+static void ConfirmNextStep()
 {
-    return await RunGitCommandAsync("rev-parse --abbrev-ref HEAD");
+    Console.WriteLine("Please press Enter to continue");
+    Console.ReadLine();
 }
 
-async Task<string> RunGitCommandAsync(string arguments)
+async Task<string> GetCurrentBranchAsync()
 {
+    return await RunGitCommandAsync("rev-parse --abbrev-ref HEAD", false);
+}
+
+async Task<string> RunGitCommandAsync(string arguments, bool confirmBeforeRun = true)
+{
+    if (confirmBeforeRun)
+    {
+        Console.WriteLine($"Next step will be: git {arguments}");
+        ConfirmNextStep();
+    }
+
     var outputBuilder = new StringBuilder();
     await Cli.Wrap("git")
         .WithArguments(arguments)
-        .WithWorkingDirectory(options.RepositoryPath)
+        .WithWorkingDirectory(path)
         .WithStandardOutputPipe(PipeTarget.ToStringBuilder(outputBuilder, Console.OutputEncoding))
         .WithStandardErrorPipe(PipeTarget.ToDelegate(Console.WriteLine))
         .ExecuteAsync();
